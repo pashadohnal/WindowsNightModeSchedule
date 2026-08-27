@@ -14,6 +14,7 @@ import argparse
 import ctypes
 import os
 import sys
+from time import sleep
 
 
 PERSONALIZE_KEY = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
@@ -146,6 +147,8 @@ def main() -> int:
     if args.action != "refresh":
         set_theme_preferences(use_dark_mode=args.action == "dark")
         print(f"Stored the {args.action} preference for apps and system UI.")
+
+    sleep(2) 
 
     warnings = broadcast_theme_notifications()
     if warnings:
