@@ -87,6 +87,26 @@ def configure_send_message_timeout():
     return send_message_timeout, dword_ptr
 
 
+def redraw_window(hwnd: int) -> None:
+    """Force a window to redraw itself."""
+    from ctypes import wintypes
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    user32.RedrawWindow.argtypes = (
+        wintypes.HWND,  # hWnd
+        wintypes.LPRECT,  # lprUpdate
+        wintypes.HRGN,  # hrgnUpdate
+        wintypes.UINT,  # flags
+    )
+    user32.RedrawWindow.restype = wintypes.BOOL
+
+    RDW_INVALIDATE = 0x0001
+    RDW_UPDATENOW = 0x0100
+    RDW_ERASE = 0x0004
+
+    if not user32.RedrawWindow(hwnd, None, None, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ERASE):
+        raise ctypes.WinError(ctypes.get_last_error())
+
 def broadcast_theme_notifications() -> list[str]:
     """Notify top-level windows that color/theme state may have changed."""
     send_message_timeout, dword_ptr = configure_send_message_timeout()
@@ -141,6 +161,24 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+
+    user32 = ctypes.windll.user32
+
+    taskbar_handles = []
+
+     # Get primary taskbar
+    h_primary = user32.FindWindowW("Shell_TrayWnd", None)
+    if h_primary:
+        taskbar_handles.append(h_primary)
+        
+    # Enumerate and get all secondary taskbars
+    h_secondary = None
+    while True:
+        h_secondary = user32.FindWindowExW(None, h_secondary, "Shell_SecondaryTrayWnd", None)
+        if not h_secondary:
+            break
+        taskbar_handles.append(h_secondary)
+
     require_windows()
     args = parse_args()
 
@@ -148,7 +186,7 @@ def main() -> int:
         set_theme_preferences(use_dark_mode=args.action == "dark")
         print(f"Stored the {args.action} preference for apps and system UI.")
 
-    sleep(2) 
+
 
     warnings = broadcast_theme_notifications()
     if warnings:
@@ -161,6 +199,17 @@ def main() -> int:
         )
         return 1
 
+    sleep(1)  # Give Explorer a moment to process the theme change 
+    # 2. Redraw ALL found taskbars to force them to pick up the new registry theme
+    # Constants for RedrawWindow: RDW_INVALIDATE (0x0001) | RDW_UPDATENOW (0x0004) | RDW_ERASE (0x0004) | RDW_ALLCHILDREN (0x0080)
+    
+    for hwnd in taskbar_handles:
+        # If your custom redraw_window function takes an HWND, use it here:
+        # redraw_window(hwnd)
+        
+        # Or call the Win32 API directly to force an immediate deep redraw:
+        redraw_window(hwnd)
+    
     print("Theme notifications were broadcast to top-level windows.")
     print("Explorer may still retain cached UI; this script does not restart it.")
     return 0
